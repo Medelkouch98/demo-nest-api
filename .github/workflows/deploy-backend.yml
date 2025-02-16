@@ -1,0 +1,69 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Build Docker Image for Backend
+        run: |
+          docker build -t demo-nest-api:latest .
+          docker images
+
+      - name: Save Docker Image as Tarball
+        run: |
+          docker save demo-nest-api:latest -o demo-nest-api.tar
+          chmod 644 demo-nest-api.tar
+          ls -lh demo-nest-api.tar
+          file demo-nest-api.tar
+
+      - name: Upload Docker Image to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "demo-nest-api.tar"
+          target: "~/demo-nest-api.tar"
+          debug: true
+
+      - name: Verify Uploaded File on EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Verifying uploaded file..."
+            chmod 644 demo-nest-api.tar/demo-nest-api.tar
+            echo "Checking uploaded file..."
+            ls -lh demo-nest-api.tar/demo-nest-api.tar
+            file demo-nest-api.tar/demo-nest-api.tar
+
+      - name: Deploy Docker Container on EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            if [ -f demo-nest-api.tar/demo-nest-api.tar ]; then
+              echo "Loading Docker image from tarball..."
+              docker load -i demo-nest-api.tar/demo-nest-api.tar
+              echo "Listing Docker images..."
+              docker images
+            else
+              echo "Error: demo-nest-api.tar is not a valid file."
+              exit 1
+            fi
+            echo "Stopping and removing existing container..."
+            docker stop demo-nest-api || true && docker rm demo-nest-api || true
+            echo "Starting new container..."
+            docker run -d --name demo-nest-api -p 3000:3000 demo-nest-api:latest
