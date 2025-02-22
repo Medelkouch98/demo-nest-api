@@ -2,7 +2,7 @@ name: Deploy Backend to EC2
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ develop, master ]
 
 jobs:
   deploy:
@@ -11,6 +11,16 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
+            # Set environment variables based on branch
+      - name: Set Environment Variables
+        id: set-env
+        run: |
+          if [ "${{ github.ref_name }}" == "develop" ]; then
+            echo "EC2_HOST=${{ secrets.EC2_STAGING_HOST }}" >> $GITHUB_ENV
+          elif [ "${{ github.ref_name }}" == "master" ]; then
+            echo "EC2_HOST=${{ secrets.EC2_PROD_HOST }}" >> $GITHUB_ENV
+          fi
 
       - name: Build Docker Image for Backend
         run: |
